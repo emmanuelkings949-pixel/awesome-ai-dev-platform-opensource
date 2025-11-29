@@ -1,5 +1,14 @@
 # AIxBlock Bug Bounty Program
 
+-------------------------------
+
+**Program Closed: The AIxBlock.io Bug Bounty Program is officially closed as of November 28, 2025.
+We thank all researchers for their valuable contributions. All validated submissions will still receive rewards as described in this document.
+For any critical post-closure security findings, please contact: contact@aixblock.io**
+
+
+-------------------------------
+
 Welcome to the **AIxBlock.io Bug Bounty Program** – our open invitation to the security community to help us keep the first unified, decentralized AI‑and‑automation platform safe for everyone. We reward actionable research that keeps our users’ AI workflows, automation pipelines, data and Solana‑based resources secure.
 
 > **Important:** All bounty activity must take place publicly in our repository:
