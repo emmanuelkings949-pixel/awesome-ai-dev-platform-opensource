@@ -9,6 +9,16 @@ import { BillingUsageType, usageService } from '../ee/platform-billing/usage/usa
 import { projectService } from '../project/project-service'
 import { aiProviderService } from './ai-provider.service'
 
+// --- SECURITY CONSTANTS ---
+const ALLOWED_AI_HOSTS = [
+    'api.openai.com',
+    'api.anthropic.com',
+    'api.cohere.ai',
+    'api.google.com',
+    'api.mistral.ai',
+    'api.replicate.com'
+];
+
 export const proxyController: FastifyPluginAsyncTypebox = async (
     fastify,
     _opts,
@@ -17,15 +27,13 @@ export const proxyController: FastifyPluginAsyncTypebox = async (
         const { provider } = request.params
         const { projectId } = request.principal as EnginePrincipal
 
-
         const platformId = await projectService.getPlatformId(projectId)
-        console.log('principal proxy', request.principal)
         const aiProvider = await aiProviderService.getOrThrow({
             platformId,
             provider,
             projectId,
         })
-        console.log('principal proxy aiProvider', aiProvider);
+        
         const exceededLimit = await usageService(request.log).aiTokensExceededLimit(projectId, 0)
         if (exceededLimit) {
             return reply.code(StatusCodes.PAYMENT_REQUIRED).send(
@@ -38,6 +46,16 @@ export const proxyController: FastifyPluginAsyncTypebox = async (
         }
 
         const url = buildUrl(aiProvider.baseUrl, request.params['*'])
+        
+        // --- SECURITY VALIDATION: HOSTNAME ALLOWLIST ---
+        const parsedUrl = new URL(url);
+        if (!ALLOWED_AI_HOSTS.includes(parsedUrl.hostname)) {
+            request.log.warn({ hostname: parsedUrl.hostname }, 'SSRF Attempt Blocked');
+            return reply.code(StatusCodes.FORBIDDEN).send({
+                error: "Security Violation: Access to the requested host is restricted to trusted AI providers."
+            });
+        }
+
         try {
             const cleanHeaders = calculateHeaders(
                 request.headers as Record<string, string | string[] | undefined>,
@@ -47,13 +65,18 @@ export const proxyController: FastifyPluginAsyncTypebox = async (
                 method: request.method,
                 headers: cleanHeaders,
                 body: JSON.stringify(request.body),
+                // Extra Security: Block redirects to prevent redirect-based SSRF
+                redirect: 'error' 
             })
 
             const responseContentType = response.headers.get('content-type')
-
             const data = await parseResponseData(response, responseContentType)
 
-            await usageService(request.log).increaseProjectAndPlatformUsage({ projectId, incrementBy: 1, usageType: BillingUsageType.AI_TOKENS })
+            await usageService(request.log).increaseProjectAndPlatformUsage({ 
+                projectId, 
+                incrementBy: 1, 
+                usageType: BillingUsageType.AI_TOKENS 
+            })
 
             await reply.code(response.status).type(responseContentType ?? 'text/plain').send(data)
         }
