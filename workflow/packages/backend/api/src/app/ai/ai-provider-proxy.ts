@@ -43,6 +43,21 @@ export const proxyController: FastifyPluginAsyncTypebox = async (
                 request.headers as Record<string, string | string[] | undefined>,
                 aiProvider.config.defaultHeaders,
             )
+            // --- SECURITY FIX: SSRF PROTECTION ---
+// Prevent access to internal/private IP addresses (e.g., Cloud Metadata)
+const parsedUrl = new URL(url);
+const forbiddenIps = ['127.0.0.1', '169.254.169.254', 'localhost'];
+const isPrivateIp = (hostname: string) => {
+    return forbiddenIps.includes(hostname) || 
+           hostname.startsWith('10.') || 
+           hostname.startsWith('192.168.') || 
+           hostname.startsWith('172.');
+};
+
+if (isPrivateIp(parsedUrl.hostname)) {
+    throw new Error("Security Alert: Access to internal network resources is restricted.");
+}
+// --- END SECURITY FIX ---
             const response = await fetch(url, {
                 method: request.method,
                 headers: cleanHeaders,
